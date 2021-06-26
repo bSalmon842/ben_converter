@@ -1,0 +1,24 @@
+version(1);
+project_name = "Viewport Shader Code Converter";
+
+patterns = {
+"*.c",
+"*.cpp",
+"*.h",
+"*.m",
+"*.bat",
+"*.sh",
+"*.4coder",
+"*.txt",
+};
+blacklist_patterns = {
+".*",
+};
+load_paths_only = {
+ {".", .recursive = false},
+};
+load_paths = {
+ { load_paths_only, .os = "win"  },
+ { load_paths_only, .os = "linux"},
+ { load_paths_only, .os = "mac"  },
+};
