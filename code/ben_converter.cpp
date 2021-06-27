@@ -111,7 +111,6 @@ s32 main(s32 argc, char **argv)
     }
     else
     {
-        // TODO(bSalmon): Get files, merge them into one buffer
         FILE *structLibFile = fopen("StructLib.osl", "r");
         FILE *ue4StdFile = fopen("UE4Std.osl", "r");
         FILE *mfLibFile = fopen("MFLib.osl", "r");
@@ -176,28 +175,30 @@ s32 main(s32 argc, char **argv)
             fread(inBuffer, 1, inFileSize, inFile);
         fclose(inFile);
             
-            s32 conversionCount = 0;
-            for (s32 charIndex = 0; charIndex < inFileSize; ++charIndex)
-            {
-                if (inBuffer[charIndex] == '.' && ((charIndex + 1) != inFileSize))
-                {
-                    char advCheck = inBuffer[charIndex + 1];
-                    if (advCheck == 'r' || advCheck == 'g' || advCheck == 'b' || 
-                        advCheck == 'x' || advCheck == 'y' || advCheck == 'z')
-                    {
-                        ++conversionCount;
-                    }
-                }
-            }
-            
-            s32 outBufferSize = maxImportSize + inFileSize + conversionCount;
+            s32 outBufferSize = maxImportSize + inFileSize;
             
             char *outBuffer = (char *)malloc(outBufferSize);
             SetChars(outBuffer, ' ', outBufferSize);
             CopyChars(outBuffer, maxImportBuffer, maxImportSize);
             CopyChars(outBuffer + maxImportSize, inBuffer, inFileSize);
             free(inBuffer);
-            
+                
+                s32 conversionCount = 0;
+                for (s32 charIndex = 0; charIndex < outBufferSize; ++charIndex)
+                {
+                    if (outBuffer[charIndex] == '.' && ((charIndex + 1) != outBufferSize))
+                    {
+                        char advCheck = inBuffer[charIndex + 1];
+                        if (advCheck == 'r' || advCheck == 'g' || advCheck == 'b' || 
+                            advCheck == 'x' || advCheck == 'y' || advCheck == 'z')
+                        {
+                            ++conversionCount;
+                        }
+                    }
+                }
+                
+                 outBuffer = (char *)realloc(outBuffer, outBufferSize + conversionCount);
+                
             for (s32 charIndex = 0; charIndex < outBufferSize; ++charIndex)
             {
                 if (outBuffer[charIndex] == '.' && !((outBuffer[charIndex + 2] >= 'A' && outBuffer[charIndex + 2] <= 'Z') || (outBuffer[charIndex + 2] >= 'a' && outBuffer[charIndex + 2] <= 'z')))
@@ -215,11 +216,6 @@ s32 main(s32 argc, char **argv)
                     {
                         ConvertNotation(outBuffer, charIndex, '2', outBufferSize, &conversionCount);
                     }
-                }
-                
-                if (conversionCount <= 0)
-                {
-                    break;
                 }
             }
             
