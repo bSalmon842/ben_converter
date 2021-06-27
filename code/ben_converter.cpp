@@ -30,8 +30,7 @@ typedef bool b8;
 typedef float f32;
 typedef double f64;
 
-#define INCLUDES_CHAR_COUNT 69
-#define INCLUDES_TEXT "#include \"StructLib.osl\"\n#include \"UE4std.osl\"\n#include \"MFLib.osl\"\n\n"
+#define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 
  inline void CopyChars(char *dest, char *src, s32 size)
 {
@@ -47,6 +46,39 @@ typedef double f64;
     {
         *dest++ = value;
     }
+}
+
+inline s32 StringLength(char *str)
+{
+    s32 result = 0;
+    while (*str++)
+	{
+		++result;
+	}
+    return result;
+}
+
+inline s32 GetFileSize(FILE *file)
+{
+    fseek(file, 0, SEEK_END);
+    s32 result = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    return result;
+}
+
+inline void CopyCharsAndAdvancePtr(char *destBuffer, char *srcBuffer, s32 srcSize, s32 *bufAdv)
+{
+    CopyChars(destBuffer + *bufAdv, srcBuffer, srcSize);
+     *bufAdv += srcSize;
+}
+
+inline void ReadFileAndCopyContents(FILE *file, s32 fileSize, char *buffer, s32 *bufAdv)
+{
+    char *fileContents = (char *)malloc(fileSize);
+    SetChars(fileContents, ' ', fileSize);
+    fread(fileContents, 1, fileSize, file);
+    CopyCharsAndAdvancePtr(buffer, fileContents, fileSize, bufAdv);
+        free(fileContents);
 }
 
 inline void ConvertNotation(char *outBuffer, s32 charIndex, char elementNumber, s32 outBufferSize, s32 *conversionCount)
@@ -79,6 +111,59 @@ s32 main(s32 argc, char **argv)
     }
     else
     {
+        // TODO(bSalmon): Get files, merge them into one buffer
+        FILE *structLibFile = fopen("StructLib.osl", "r");
+        FILE *ue4StdFile = fopen("UE4Std.osl", "r");
+        FILE *mfLibFile = fopen("MFLib.osl", "r");
+        if (!(mfLibFile && ue4StdFile && structLibFile))
+        {
+            if (!mfLibFile)
+            {
+                printf("Could not find MFLib.osl\n");
+            }
+            if (!ue4StdFile)
+            {
+                printf("Could not find UE4Std.osl\n");
+            }
+            if (!structLibFile)
+            {
+                printf("Could not find StructLib.osl\n");
+            }
+        }
+        else
+        {
+            s32 structLibSize = GetFileSize(structLibFile);
+            s32 ue4StdSize = GetFileSize(ue4StdFile);
+            s32 mfLibSize = GetFileSize(mfLibFile);
+            
+            char *importHeaderComment = "\n// IMPORTED FUNCTIONS START //";
+            char *importFooterComment = "\n// IMPORTED FUNCTIONS END //\n\n";
+            char *importStructLibComment = "\n\n// StructLib.osl //\n\n";
+            char *importUE4StdComment = "\n\n// UE4Std.osl //\n\n";
+            char *importMFLibComment = "\n\n// MFLib.osl //\n\n";
+            s32 importCommentsSize = (StringLength(importHeaderComment) + StringLength(importFooterComment) +
+                                      StringLength(importStructLibComment) + StringLength(importUE4StdComment) + StringLength(importMFLibComment));
+            
+            s32 maxImportSize = importCommentsSize + mfLibSize + ue4StdSize + structLibSize;
+            char *maxImportBuffer = (char *)malloc(maxImportSize);
+            SetChars(maxImportBuffer, ' ', maxImportSize);
+            
+            s32 bufAdv = 0;
+              CopyCharsAndAdvancePtr(maxImportBuffer, importHeaderComment, StringLength(importHeaderComment), &bufAdv);
+            CopyCharsAndAdvancePtr(maxImportBuffer, importStructLibComment, StringLength(importStructLibComment), &bufAdv);
+            ReadFileAndCopyContents(structLibFile, structLibSize, maxImportBuffer, &bufAdv);
+            
+            CopyCharsAndAdvancePtr(maxImportBuffer, importUE4StdComment, StringLength(importUE4StdComment), &bufAdv);
+            ReadFileAndCopyContents(ue4StdFile, ue4StdSize, maxImportBuffer, &bufAdv);
+            
+            CopyCharsAndAdvancePtr(maxImportBuffer, importMFLibComment, StringLength(importMFLibComment), &bufAdv);
+            ReadFileAndCopyContents(mfLibFile, mfLibSize, maxImportBuffer, &bufAdv);
+            CopyChars(maxImportBuffer + bufAdv, importFooterComment, StringLength(importFooterComment));
+            
+            fclose(mfLibFile);
+            fclose(ue4StdFile);
+            fclose(structLibFile);
+            
         char *inFilepath = argv[1];
         char *outFilepath = argv[2];
         
@@ -86,10 +171,7 @@ s32 main(s32 argc, char **argv)
         FILE *outFile = fopen(outFilepath, "w");
         if (inFile && outFile)
         {
-            fseek(inFile, 0, SEEK_END);
-            s32 inFileSize = ftell(inFile);
-            fseek(inFile, 0, SEEK_SET);
-            
+                s32 inFileSize = GetFileSize(inFile);
             char *inBuffer = (char *)malloc(inFileSize);
             fread(inBuffer, 1, inFileSize, inFile);
         fclose(inFile);
@@ -108,15 +190,13 @@ s32 main(s32 argc, char **argv)
                 }
             }
             
-            s32 outBufferSize = INCLUDES_CHAR_COUNT + inFileSize + conversionCount;
+            s32 outBufferSize = maxImportSize + inFileSize + conversionCount;
             
             char *outBuffer = (char *)malloc(outBufferSize);
             SetChars(outBuffer, ' ', outBufferSize);
-            CopyChars(outBuffer + INCLUDES_CHAR_COUNT, inBuffer, inFileSize);
-            
+            CopyChars(outBuffer, maxImportBuffer, maxImportSize);
+            CopyChars(outBuffer + maxImportSize, inBuffer, inFileSize);
             free(inBuffer);
-            
-            CopyChars(outBuffer, INCLUDES_TEXT, INCLUDES_CHAR_COUNT);
             
             for (s32 charIndex = 0; charIndex < outBufferSize; ++charIndex)
             {
@@ -146,6 +226,7 @@ s32 main(s32 argc, char **argv)
             fwrite(outBuffer, outBufferSize, 1, outFile);
             fclose(outFile);
             free(outBuffer);
+            }
         }
     }
     
