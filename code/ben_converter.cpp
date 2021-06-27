@@ -34,9 +34,11 @@ typedef double f64;
 
  inline void CopyChars(char *dest, char *src, s32 size)
 {
-    while (size--)
+    s32 counter = 0;
+    while (counter < size)
     {
         *dest++ = *src++;
+        counter++;
     }
 }
 
@@ -56,6 +58,56 @@ inline s32 StringLength(char *str)
 		++result;
 	}
     return result;
+}
+
+inline b32 IsStringAEqualAtB(char *a, char *b, s32 aSize)
+{
+    b32 result = true;
+    
+    for (s32 i = 0; i < aSize; ++i)
+    {
+        if (a[i] != b[i])
+        {
+            return false;
+        }
+    }
+    
+    return result;
+}
+
+inline void ConcatenateStrings(char *dest, char *a, s32 aSize, char *b, s32 bSize)
+{
+    for (s32 i = 0; i < aSize; ++i)
+	{
+		*dest++ = *a++;
+	}
+    
+	for (s32 i = 0; i < bSize; ++i)
+	{
+		*dest++ = *b++;
+	}
+}
+
+inline void InsertStringAIntoStringB(char *a, char *b, char *at)
+{
+    if (at == b)
+    {
+        char *temp = (char *)malloc(StringLength(a) + StringLength(b));
+        ConcatenateStrings(temp, a, StringLength(a), b, StringLength(b));
+        CopyChars(b, temp, StringLength(b));
+        free(temp);
+    }
+    else
+    {
+        s32 diff = (s32)(at - b);
+        char *temp1 = (char *)malloc(diff + 2);
+        char *temp2 = (char *)malloc(StringLength(b) + StringLength(a));
+        ConcatenateStrings(temp1, b, diff, a, StringLength(a));
+        ConcatenateStrings(temp2, temp1, StringLength(a) + diff, at, StringLength(b) - diff);
+        CopyChars(b, temp2, StringLength(b));
+        free(temp2);
+        free(temp1);
+    }
 }
 
 inline s32 GetFileSize(FILE *file)
@@ -85,22 +137,7 @@ inline void ConvertNotation(char *outBuffer, s32 charIndex, char elementNumber, 
 {
     outBuffer[charIndex] = '[';
     outBuffer[charIndex + 1] = elementNumber;
-    s32 swapIndex = outBufferSize - 1;
-    while (true)
-    {
-        char oldValue = outBuffer[swapIndex - 1];
-        outBuffer[swapIndex - 1] = outBuffer[swapIndex];
-        outBuffer[swapIndex] = oldValue;
-        
-        --swapIndex;
-        
-        if (swapIndex == (charIndex + 2))
-        {
-            outBuffer[swapIndex] = ']';
-            break;
-        }
-    }
-    --(*conversionCount);
+    InsertStringAIntoStringB("]", outBuffer, &outBuffer[charIndex + 2]);
 }
 
 s32 main(s32 argc, char **argv)
@@ -111,9 +148,9 @@ s32 main(s32 argc, char **argv)
     }
     else
     {
-        FILE *structLibFile = fopen("StructLib.osl", "r");
-        FILE *ue4StdFile = fopen("UE4Std.osl", "r");
-        FILE *mfLibFile = fopen("MFLib.osl", "r");
+        FILE *structLibFile = fopen("StructLib.osl", "rb");
+        FILE *ue4StdFile = fopen("UE4Std.osl", "rb");
+        FILE *mfLibFile = fopen("MFLib.osl", "rb");
         if (!(mfLibFile && ue4StdFile && structLibFile))
         {
             if (!mfLibFile)
@@ -163,24 +200,44 @@ s32 main(s32 argc, char **argv)
             fclose(ue4StdFile);
             fclose(structLibFile);
             
+            // TODO(bSalmon): Find functions
+            
         char *inFilepath = argv[1];
         char *outFilepath = argv[2];
         
-        FILE *inFile = fopen(inFilepath, "r");
-        FILE *outFile = fopen(outFilepath, "w");
+        FILE *inFile = fopen(inFilepath, "rb");
+        FILE *outFile = fopen(outFilepath, "wb");
         if (inFile && outFile)
         {
                 s32 inFileSize = GetFileSize(inFile);
             char *inBuffer = (char *)malloc(inFileSize);
             fread(inBuffer, 1, inFileSize, inFile);
         fclose(inFile);
-            
+                
+                s32 includesSize = 0;
+                b32 foundInclude = false;
+                for (s32 charIndex = 0; charIndex < inFileSize; ++charIndex)
+                {
+                    if (IsStringAEqualAtB("#include", &inBuffer[charIndex], 8))
+                    {
+                        foundInclude = true;
+                    }
+                    
+                        if (foundInclude && inBuffer[charIndex] == '\n')
+                        {
+                        includesSize = charIndex + 1;
+                        foundInclude = false;
+                        }
+                }
+                
             s32 outBufferSize = maxImportSize + inFileSize;
             
             char *outBuffer = (char *)malloc(outBufferSize);
-            SetChars(outBuffer, ' ', outBufferSize);
-            CopyChars(outBuffer, maxImportBuffer, maxImportSize);
-            CopyChars(outBuffer + maxImportSize, inBuffer, inFileSize);
+                SetChars(outBuffer, ' ', outBufferSize);
+                
+                CopyChars(outBuffer, inBuffer, includesSize);
+                CopyChars(outBuffer + includesSize, maxImportBuffer, maxImportSize);
+                CopyChars(outBuffer + includesSize + maxImportSize, inBuffer + includesSize, inFileSize - includesSize);
             free(inBuffer);
                 
                 s32 conversionCount = 0;
@@ -188,7 +245,7 @@ s32 main(s32 argc, char **argv)
                 {
                     if (outBuffer[charIndex] == '.' && ((charIndex + 1) != outBufferSize))
                     {
-                        char advCheck = inBuffer[charIndex + 1];
+                        char advCheck = outBuffer[charIndex + 1];
                         if (advCheck == 'r' || advCheck == 'g' || advCheck == 'b' || 
                             advCheck == 'x' || advCheck == 'y' || advCheck == 'z')
                         {
@@ -197,7 +254,31 @@ s32 main(s32 argc, char **argv)
                     }
                 }
                 
-                 outBuffer = (char *)realloc(outBuffer, outBufferSize + conversionCount);
+                s32 includeCount = 0;
+                for (s32 charIndex = 0; charIndex < outBufferSize; ++charIndex)
+                {
+                    if (outBuffer[charIndex] == '#' && ((charIndex + 1) != outBufferSize))
+                    {
+                        char advCheck = outBuffer[charIndex + 1];
+                        if (advCheck == 'i')
+                        {
+                            ++includeCount;
+                        }
+                    }
+                }
+                
+                outBufferSize += (conversionCount + (includeCount * 2));
+                outBuffer = (char *)realloc(outBuffer, outBufferSize);
+                
+                // TODO(bSalmon): Insert comments
+                for (s32 charIndex = 0; charIndex < outBufferSize; ++charIndex)
+                {
+                    if (IsStringAEqualAtB("#include", &outBuffer[charIndex], 8))
+                    {
+                        InsertStringAIntoStringB("//", outBuffer, &outBuffer[charIndex]);
+                        charIndex += 10;
+                    }
+                }
                 
             for (s32 charIndex = 0; charIndex < outBufferSize; ++charIndex)
             {
@@ -221,7 +302,7 @@ s32 main(s32 argc, char **argv)
             
             fwrite(outBuffer, outBufferSize, 1, outFile);
             fclose(outFile);
-            free(outBuffer);
+            //free(outBuffer);
             }
         }
     }
