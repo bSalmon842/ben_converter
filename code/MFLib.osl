@@ -106,6 +106,7 @@ point uvChannel(int channel, CoordinateGroup uvInput)
 color pwTextureSample(string FileName, point UV, int UDIM, int sRGB)
 {
     float ulookup = UV.x;
+	float b = TEST_def;
 	float vlookup = 1.0 - UV.y;
     if (UDIM)
 	{

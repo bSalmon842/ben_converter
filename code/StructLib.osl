@@ -40,3 +40,6 @@ struct CoordinateGroup
 	point uvCoords2;
 	point uvCoords3;
 };
+
+#define TEST_def "test define" 
+
